@@ -346,25 +346,44 @@ function updateNav(){
 }
 function updatePC(){ document.getElementById('pc').textContent=S.players.length; }
 
-// ── API helper ────────────────────────────────────────────────────
-function api(body,onSuccess,onError){
-  fetch('/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+// ── API helper (GET) ──────────────────────────────────────────────
+var GAS_URL='https://script.google.com/macros/s/AKfycbwEoQgnJ6U3ahz9mFwjVlmoOg2Yylpe7WEFWZt5USimBxiMQn8od3ia1wYCsz8T3KMYBw/exec';
+function api(params,onSuccess,onError){
+  var qs=Object.keys(params).map(function(k){
+    var v=params[k]; if(v===null||v===undefined)v='';
+    return encodeURIComponent(k)+'='+encodeURIComponent(v);
+  }).join('&');
+  fetch(GAS_URL+'?'+qs)
     .then(function(r){return r.json();})
-    .then(function(data){ if(data&&data.error){if(onError)onError(data.error);}else{if(onSuccess)onSuccess(data);} })
-    .catch(function(e){ if(onError)onError(e.toString()); console.error(e); });
+    .then(function(data){if(onSuccess)onSuccess(data);})
+    .catch(function(e){if(onError)onError(e.toString());console.error('API error',e);});
 }
 
-// ── Save with debounce ────────────────────────────────────────────
-function schedSaveT(){
-  clearTimeout(S.saveT);
-  S.saveT=setTimeout(function(){ api({action:'saveTrainings',trainings:S.trainings}); },800);
+// ── Save operations (granular GET calls) ─────────────────────────
+function schedSaveT(date,pid){
+  if(!date||!pid)return;
+  var r=S.trainings.find(function(r){return r.fecha===date&&r.jugadorId===pid;})||{};
+  api({action:'setAtt',fecha:date,jugadorId:pid,estado:r.estado||'unknown',
+    notaJugador:r.notaJugador||'',notaSesion:r.notaSesion||''});
 }
-function saveMatchesNow(){
-  api({action:'saveMatches',matches:S.matches});
-  api({action:'saveMatchPlayers',matchPlayers:S.matchPlayers});
+function saveSessNoteNow(date){
+  api({action:'setSessNote',fecha:date,nota:getSessNote(date)});
 }
-function savePlayersNow(){
-  api({action:'savePlayers',players:S.players});
+function saveMatchesNow(mid){
+  var m=getMatch(mid); if(!m)return;
+  api({action:'saveMatch',id:m.id,fecha:m.fecha,rival:m.rival,sede:m.sede||'',
+    resultado:m.resultado||'',notas:m.notas||''});
+}
+function saveMPNow(mid,pid){
+  var mp=getMatchPlayer(mid,pid);
+  api({action:'setMP',partidoId:mid,jugadorId:pid,
+    convocado:mp.convocado?'true':'false',titular:mp.titular?'true':'false',
+    minutos:mp.minutos||'',posicion:mp.posicion||'',
+    valoracion:mp.valoracion||0,notas:mp.notas||''});
+}
+function savePlayersNow(pid){
+  var p=getPlayer(pid); if(!p)return;
+  api({action:'savePlayer',id:p.id,nombre:p.nombre,dorsal:p.dorsal,posicion:p.posicion});
 }
 
 // ── Training data ops ─────────────────────────────────────────────
@@ -374,7 +393,7 @@ function setAtt(date,pid){
   var next=CYCLE[(CYCLE.indexOf(cur)+1)%CYCLE.length];
   if(idx>=0) S.trainings[idx].estado=next;
   else S.trainings.push({fecha:date,jugadorId:pid,estado:next,notaJugador:'',notaSesion:getSessNote(date)});
-  schedSaveT();
+  schedSaveT(date,pid);
   var btn=document.getElementById('att-'+pid);
   if(btn) btn.className='pill '+((ST[next]||ST.unknown).c);
   if(btn) btn.innerHTML=(ST[next]||ST.unknown).i+' '+(ST[next]||ST.unknown).l;
@@ -389,7 +408,7 @@ function setSessNote(date){
       S.trainings.push({fecha:date,jugadorId:p.id,estado:'unknown',notaJugador:'',notaSesion:val});
     });
   }
-  schedSaveT();
+  saveSessNoteNow(date);
 }
 function setPlayerNoteVal(date,pid){
   var el=document.getElementById('pnote-'+pid);
@@ -398,7 +417,7 @@ function setPlayerNoteVal(date,pid){
   var idx=S.trainings.findIndex(function(r){return r.fecha===date&&r.jugadorId===pid;});
   if(idx>=0) S.trainings[idx].notaJugador=val;
   else S.trainings.push({fecha:date,jugadorId:pid,estado:'unknown',notaJugador:val,notaSesion:getSessNote(date)});
-  schedSaveT();
+  schedSaveT(date,pid);
 }
 function toggleExpand(pid){
   var el=document.getElementById('exp-'+pid);
@@ -424,7 +443,7 @@ function setStars(mid,pid,val){
   mp.valoracion=mp.valoracion===val?0:val;
   var container=document.getElementById('stars-'+mid+'-'+pid);
   if(container) container.innerHTML=starsInner(mp.valoracion,mid,pid);
-  saveMatchesNow();
+  saveMPNow(mid,pid);
 }
 function starsInner(val,mid,pid){
   val=parseInt(val)||0;
@@ -441,7 +460,7 @@ function toggleConv(mid,pid){
   var sw=document.getElementById('sw-'+pid);
   if(sw)sw.checked=mp.convocado;
   if(det)det.style.display=mp.convocado?'grid':'none';
-  saveMatchesNow();
+  saveMPNow(mid,pid);
 }
 function setMPField(mid,pid,field){
   var el=document.getElementById('mp'+field+'-'+pid);
@@ -449,7 +468,7 @@ function setMPField(mid,pid,field){
   var mp=S.matchPlayers.find(function(x){return x.partidoId===mid&&x.jugadorId===pid;});
   if(!mp){mp={partidoId:mid,jugadorId:pid,convocado:true,titular:false,minutos:'',posicion:'',valoracion:0,notas:''};S.matchPlayers.push(mp);}
   mp[field]=field==='titular'?(el.value==='true'):el.value;
-  saveMatchesNow();
+  saveMPNow(mid,pid);
 }
 
 // ── RENDER CONTENT ────────────────────────────────────────────────
@@ -707,7 +726,7 @@ function saveMatchForm(){
   if(!f.fecha){alert('Indica la fecha del partido.');return;}
   var idx=S.matches.findIndex(function(m){return m.id===f.id;});
   if(idx>=0) S.matches[idx]=f; else S.matches.push(f);
-  saveMatchesNow();
+  saveMatchesNow(f.id);
   S.view='match-detail';
   S.viewMatchId=f.id;
   renderContent();
@@ -716,7 +735,7 @@ function deleteMatch(mid){
   if(!confirm('¿Eliminar este partido y todos sus datos?'))return;
   S.matches=S.matches.filter(function(m){return m.id!==mid;});
   S.matchPlayers=S.matchPlayers.filter(function(mp){return mp.partidoId!==mid;});
-  saveMatchesNow();
+  api({action:'deleteMatch',id:mid});
   go('partidos');
 }
 
@@ -840,14 +859,14 @@ function savePlayerForm(){
   var idx=S.players.findIndex(function(p){return p.id===f.id;});
   var player={id:f.id,nombre:f.nombre,dorsal:f.dorsal,posicion:f.posicion};
   if(idx>=0) S.players[idx]=player; else S.players.push(player);
-  savePlayersNow();
+  savePlayersNow(f.id);
   updatePC();
   go('equipo');
 }
 function deletePlayer(pid){
   if(!confirm('¿Eliminar jugador?'))return;
   S.players=S.players.filter(function(p){return p.id!==pid;});
-  savePlayersNow();
+  api({action:'deletePlayer',id:pid});
   updatePC();
   go('equipo');
 }
@@ -944,13 +963,13 @@ function doLogin(){
       document.getElementById('login-err').className='login-err';
       document.getElementById('pwd-input').value='';
     }
-  },function(e){console.error(e);});
+  },function(e){console.error(e);document.getElementById('login-err').className='login-err';});
 }
 
 function loadData(){
   document.getElementById('content').innerHTML='<div class="loading"><div class="spinner"></div><p style="color:var(--light);font-size:13px">Cargando datos...</p></div>';
   api({action:'getData'},function(data){
-    if(data.error){alert('Error cargando datos: '+data.error);return;}
+    if(data.error){alert('Error: '+data.error);return;}
     S.players=data.players||[];
     S.trainings=data.trainings||[];
     S.matches=data.matches||[];
