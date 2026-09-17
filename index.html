@@ -137,6 +137,14 @@ input:checked + .sw-slider::before{transform:translateX(18px)}
 /* Progress bar */
 .prog-bar{height:6px;background:#f3f4f6;border-radius:3px;overflow:hidden;margin-top:6px}
 .prog-fill{height:100%;border-radius:3px;background:var(--blue);transition:width .3s}
+@media print{
+  .bnav,.back-btn,.no-print{display:none!important}
+  body{background:#fff}
+  #app{max-width:100%}
+  .card-dark{background:#0d1b2a!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .card{break-inside:avoid}
+  th{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
 </style>
 </head>
 <body>
@@ -478,6 +486,7 @@ function renderContent(){
   if(S.view==='match-form'){renderMatchForm(c);return;}
   if(S.view==='match-detail'){renderMatchDetail(c);return;}
   if(S.view==='player-form'){renderPlayerForm(c);return;}
+  if(S.view==='player-report'){renderPlayerReport(c);return;}
   switch(S.tab){
     case 'hoy': renderHoy(c);break;
     case 'entrenos': renderEntrenos(c);break;
@@ -814,10 +823,94 @@ function renderEquipo(c){
         +'<div class="pinfo"><p class="pname">'+esc(p.nombre)+'</p>'
         +'<p class="psub">#'+esc(p.dorsal)+(st.tot>0?' · '+(st.pre+st.lat)+'/'+st.tot+' sesiones':'')+'</p></div>'
         +(st.pct!==null?'<p style="font-size:16px;font-weight:700;color:'+(st.pct>=75?'#16a34a':st.pct>=50?'#d97706':'#dc2626')+'">'+st.pct+'%</p>':'')
+        +'<button class="pexp" style="background:#dbeafe;color:#1d4ed8;margin-right:4px" onclick="openPlayerReport(\''+p.id+'\')">📊</button>'
         +'<button class="pexp" onclick="openPlayerForm(\''+p.id+'\')">✏️</button>'
         +'</div></div>';
     });
   }
+  h+='</div>';
+  c.innerHTML=h;
+}
+
+// ── VIEW: INFORME JUGADOR ─────────────────────────────────────────
+function openPlayerReport(pid){S.view='player-report';S.viewPlayerId=pid;renderContent();}
+function renderPlayerReport(c){
+  var pid=S.viewPlayerId;
+  var p=getPlayer(pid);
+  if(!p){c.innerHTML='<div class="tab-pad"><p>Jugador no encontrado.</p></div>';return;}
+  var st=playerStats(pid);
+  var mps=S.matchPlayers.filter(function(mp){return mp.jugadorId===pid&&mp.convocado;});
+  var totalMins=mps.reduce(function(s,mp){return s+(parseInt(mp.minutos)||0);},0);
+  var starters=mps.filter(function(mp){return mp.titular;}).length;
+  var rated=mps.filter(function(mp){return parseInt(mp.valoracion)>0;});
+  var avgRating=rated.length>0?(rated.reduce(function(s,mp){return s+(parseInt(mp.valoracion)||0);},0)/rated.length).toFixed(1):0;
+  var trainObs=S.trainings.filter(function(r){return r.jugadorId===pid&&r.notaJugador&&r.notaJugador.toString().trim();}).sort(function(a,b){return a.fecha<b.fecha?1:-1;});
+  var past=TDATES.filter(function(d){return d<=TODAY;}).slice(-20).reverse();
+  var matchHist=mps.map(function(mp){var m=getMatch(mp.partidoId);return m?{m:m,mp:mp}:null;}).filter(Boolean).sort(function(a,b){return a.m.fecha<b.m.fecha?1:-1;});
+
+  var h='<button class="back-btn no-print" onclick="go(\'equipo\')">← Equipo</button><div class="tab-pad">';
+  // Cabecera
+  h+='<div class="card-dark" style="text-align:center;padding:22px 16px;margin-bottom:12px">'
+    +'<div style="display:flex;justify-content:center;margin-bottom:10px">'+posBadge(p.posicion,52)+'</div>'
+    +'<p style="font-size:22px;font-weight:700;color:#fff;margin-bottom:3px">'+esc(p.nombre)+'</p>'
+    +'<p style="color:rgba(255,255,255,.5);font-size:13px">Dorsal #'+esc(p.dorsal)+' · '+esc(p.posicion)+'</p>'
+    +'<p style="color:rgba(255,255,255,.3);font-size:11px;margin-top:4px">Informe · Temporada 2026/27 · TAE C · 5ª Categoría Alevín</p>'
+    +'</div>';
+  // Estadísticas resumen
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">';
+  [{l:'Asistencia',v:st.pct!==null?st.pct+'%':'–',s:(st.pre+st.lat)+'/'+st.tot+' sesiones',c:'var(--blue)'},
+   {l:'Minutos jugados',v:totalMins+"'",s:mps.length+' conv. · '+starters+' titular',c:'#7c3aed'},
+   {l:'Faltas',v:st.abs,s:st.inj+' por lesión · '+st.lat+' tarde',c:'#dc2626'},
+   {l:'Valoración media',v:avgRating>0?avgRating+'★':'–',s:rated.length+' partidos valorados',c:'#d97706'}
+  ].forEach(function(sc){
+    h+='<div class="card"><p style="font-size:22px;font-weight:700;color:'+sc.c+';line-height:1;margin-bottom:3px">'+sc.v+'</p>'
+      +'<p style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:1px">'+sc.l+'</p>'
+      +'<p style="font-size:11px;color:var(--light)">'+sc.s+'</p></div>';
+  });
+  h+='</div>';
+  // Historial asistencia
+  h+='<p class="slbl">Historial de asistencia (últimas 20 sesiones)</p>'
+    +'<div class="card" style="padding:0;overflow:hidden;margin-bottom:14px">'
+    +'<table style="width:100%;border-collapse:collapse;font-size:12px">'
+    +'<tr style="background:var(--blue);color:#fff"><th style="padding:7px 10px;text-align:left;-webkit-print-color-adjust:exact">Fecha</th><th style="padding:7px 10px;text-align:left">Estado</th><th style="padding:7px 10px;text-align:left">Observación</th></tr>';
+  past.forEach(function(d,i){
+    var att=getAtt(d,pid); var cfg=ST[att]||ST.unknown; var note=getPlayerNote(d,pid);
+    h+='<tr style="background:'+(i%2===0?'#fff':'#f9fafb')+'">'
+      +'<td style="padding:5px 10px;color:var(--muted)">'+fmtS(d)+'</td>'
+      +'<td style="padding:5px 10px"><span style="color:'+cfg.color+';font-weight:600">'+cfg.icon+' '+cfg.label+'</span></td>'
+      +'<td style="padding:5px 10px;color:var(--muted)">'+esc(note||'–')+'</td></tr>';
+  });
+  h+='</table></div>';
+  // Partidos
+  if(matchHist.length>0){
+    h+='<p class="slbl">Partidos</p>'
+      +'<div class="card" style="padding:0;overflow:hidden;margin-bottom:14px">'
+      +'<table style="width:100%;border-collapse:collapse;font-size:12px">'
+      +'<tr style="background:var(--blue);color:#fff;-webkit-print-color-adjust:exact"><th style="padding:7px 10px;text-align:left">Fecha</th><th style="padding:7px 10px;text-align:left">Rival</th><th style="padding:7px 10px;text-align:center">Rol</th><th style="padding:7px 10px;text-align:center">Min</th><th style="padding:7px 10px;text-align:center">Val</th></tr>';
+    matchHist.forEach(function(d,i){
+      var bg=i%2===0?'#fff':'#f9fafb';
+      var stars=''; for(var s=1;s<=5;s++) stars+='<span style="color:'+(s<=(parseInt(d.mp.valoracion)||0)?'#f5c518':'#e5e7eb')+'">★</span>';
+      h+='<tr style="background:'+bg+'">'
+        +'<td style="padding:5px 10px;color:var(--muted)">'+fmtS(d.m.fecha)+'</td>'
+        +'<td style="padding:5px 10px;font-weight:600">'+esc(d.m.rival)+(d.m.resultado?' <span style="color:var(--blue)">'+esc(d.m.resultado)+'</span>':'')+'</td>'
+        +'<td style="padding:5px 10px;text-align:center;color:'+(d.mp.titular?'#16a34a':'#d97706')+';font-weight:600">'+(d.mp.titular?'Titular':'Suplente')+'</td>'
+        +'<td style="padding:5px 10px;text-align:center;font-weight:600">'+(d.mp.minutos||'–')+"'</td>"
+        +'<td style="padding:5px 10px;text-align:center">'+stars+'</td></tr>';
+      if(d.mp.notas&&d.mp.notas.toString().trim())
+        h+='<tr style="background:'+bg+'"><td colspan="5" style="padding:2px 10px 7px;color:var(--muted);font-style:italic">'+esc(d.mp.notas)+'</td></tr>';
+    });
+    h+='</table></div>';
+  }
+  // Observaciones de entrenamiento
+  if(trainObs.length>0){
+    h+='<p class="slbl">Observaciones de entrenamiento</p>';
+    trainObs.forEach(function(r){
+      h+='<div class="card" style="padding:10px 14px;margin-bottom:6px">'
+        +'<p style="font-size:11px;color:var(--light);margin-bottom:3px">'+fmtL(r.fecha)+'</p>'
+        +'<p style="font-size:13px;color:var(--text)">'+esc(r.notaJugador)+'</p></div>';
+    });
+  }
+  h+='<button onclick="window.print()" class="btn btn-blue btn-full no-print" style="margin:8px 0 20px">🖨 Imprimir / Guardar PDF</button>';
   h+='</div>';
   c.innerHTML=h;
 }
