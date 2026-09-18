@@ -229,14 +229,15 @@ var CYCLE=['unknown','present','late','injured','absent'];
 var PC={Portero:'#f59e0b',Defensa:'#3b82f6',Banda:'#8b5cf6',Centrocampista:'#10b981',Delantero:'#ef4444'};
 var POS_SHORT={Portero:'PO',Defensa:'DF',Banda:'BD',Centrocampista:'CC',Delantero:'DL'};
 var POSITIONS=['Portero','Defensa','Banda','Centrocampista','Delantero'];
-var PLAY_POS=['PO','DI','DD','IL','MC','IR','DE'];
+var PLAY_POS=['PO','DF','MC','BI','BD','DC'];
+var PLAY_POS_LABELS={PO:'Portero',DF:'Defensa',MC:'Medio centro',BI:'Banda izquierda',BD:'Banda derecha',DC:'Delantero centro'};
 
 // ── State ──────────────────────────────────────────────────────────
 var S={
   tab:'hoy', players:[], trainings:[], matches:[], matchPlayers:[],
   view:null, viewDate:null, viewMatchId:null, viewPlayerId:null,
   matchForm:null, playerForm:null,
-  saveT:null, saveMT:null
+  saveT:null, saveMT:null, lineupPos:{}
 };
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -754,88 +755,125 @@ function toggleLineup(mid){
   var btn=document.getElementById('lineup-btn-'+mid);
   if(!el)return;
   var visible=el.style.display==='block';
-  el.style.display=visible?'none':'block';
-  btn.textContent=visible?'🏟 Ver alineación ▾':'🏟 Ocultar alineación ▲';
+  if(visible){
+    el.style.display='none';
+    btn.textContent='🏟 Ver alineación ▾';
+  } else {
+    el.innerHTML=lineupHTML(mid);
+    el.style.display='block';
+    btn.textContent='🏟 Ocultar alineación ▲';
+    initLineupDrag(mid);
+  }
 }
 
 function lineupHTML(mid){
-  // Coordenadas de cada posición en campo Fútbol 7 (1-2-3-1), ataque hacia arriba
-  var coords={
-    'PO': {x:140,y:345},
-    'DI': {x:62, y:265},
-    'DD': {x:218,y:265},
-    'IL': {x:48, y:175},
-    'MC': {x:140,y:182},
-    'IR': {x:232,y:175},
-    'DE': {x:140,y:72}
+  var POS_DEF={
+    'PO':[{x:140,y:345}],
+    'DF':[{x:72,y:268},{x:208,y:268},{x:140,y:268}],
+    'BI':[{x:48,y:178},{x:60,y:215}],
+    'MC':[{x:140,y:185},{x:100,y:192},{x:180,y:192}],
+    'BD':[{x:232,y:178},{x:220,y:215}],
+    'DC':[{x:140,y:72},{x:105,y:82},{x:175,y:82}]
   };
   var mps=S.matchPlayers.filter(function(mp){return mp.partidoId===mid&&mp.convocado;});
   var titulars=mps.filter(function(mp){return mp.titular;});
   var subs=mps.filter(function(mp){return !mp.titular;});
-  var occupied={}, placed=[], unplaced=[];
-  titulars.forEach(function(mp){
-    var p=getPlayer(mp.jugadorId);
+  var posCount={};
+  function getCoords(mp){
+    var pid=mp.jugadorId;
+    if(S.lineupPos[mid]&&S.lineupPos[mid][pid]) return S.lineupPos[mid][pid];
     var pos=mp.posicion||'';
-    if(pos&&coords[pos]&&!occupied[pos]){occupied[pos]=true;placed.push({p:p,mp:mp,pos:pos});}
-    else unplaced.push({p:p,mp:mp});
-  });
-
-  // SVG del campo
-  var svg='<svg viewBox="0 0 280 400" width="100%" style="max-width:300px;display:block;margin:0 auto" xmlns="http://www.w3.org/2000/svg">';
-  // Campo
+    if(pos&&POS_DEF[pos]){
+      var n=posCount[pos]||0;posCount[pos]=n+1;
+      return POS_DEF[pos][Math.min(n,POS_DEF[pos].length-1)];
+    }
+    var fb=[{x:140,y:197},{x:100,y:205},{x:180,y:205},{x:80,y:230},{x:200,y:230}];
+    var n2=posCount['_']||0;posCount['_']=n2+1;
+    return fb[Math.min(n2,fb.length-1)];
+  }
+  var svg='<svg id="lineup-svg-'+mid+'" viewBox="0 0 280 400" width="100%" style="max-width:300px;display:block;margin:0 auto;touch-action:none;user-select:none" xmlns="http://www.w3.org/2000/svg">';
   svg+='<rect x="10" y="8" width="260" height="378" rx="4" fill="#2d7a3c"/>';
-  // Líneas
   svg+='<line x1="10" y1="197" x2="270" y2="197" stroke="rgba(255,255,255,.35)" stroke-width="1"/>';
   svg+='<circle cx="140" cy="197" r="28" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1"/>';
   svg+='<circle cx="140" cy="197" r="2" fill="rgba(255,255,255,.45)"/>';
-  // Área propia (abajo)
   svg+='<rect x="72" y="326" width="136" height="60" rx="2" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="1"/>';
   svg+='<rect x="106" y="384" width="68" height="10" rx="1" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.5"/>';
-  // Área rival (arriba)
   svg+='<rect x="72" y="8" width="136" height="55" rx="2" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="1"/>';
   svg+='<rect x="106" y="0" width="68" height="10" rx="1" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.5"/>';
-  // Puntos de penalti
   svg+='<circle cx="140" cy="348" r="2" fill="rgba(255,255,255,.35)"/>';
   svg+='<circle cx="140" cy="46" r="2" fill="rgba(255,255,255,.35)"/>';
-  // Label formación
-  svg+='<text x="140" y="395" font-family="sans-serif" font-size="8" fill="rgba(255,255,255,.4)" text-anchor="middle">1 · 2 · 3 · 1</text>';
-
-  // Jugadores titulares con posición
-  placed.forEach(function(item){
-    var x=coords[item.pos].x, y=coords[item.pos].y;
-    var nombre=item.p?item.p.nombre.split(' ')[0]:'?';
-    var dorsal=item.p?item.p.dorsal:'';
-    svg+='<circle cx="'+x+'" cy="'+y+'" r="19" fill="#1a7dc4" stroke="rgba(255,255,255,.9)" stroke-width="2"/>';
-    svg+='<text x="'+x+'" y="'+y+'" font-family="sans-serif" font-size="12" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="central">'+esc(dorsal)+'</text>';
-    svg+='<text x="'+x+'" y="'+(y+27)+'" font-family="sans-serif" font-size="9.5" font-weight="600" fill="white" text-anchor="middle">'+esc(nombre)+'</text>';
+  svg+='<text x="140" y="396" font-family="sans-serif" font-size="8" fill="rgba(255,255,255,.3)" text-anchor="middle">1 · 2 · 3 · 1</text>';
+  titulars.forEach(function(mp){
+    var p=getPlayer(mp.jugadorId);if(!p)return;
+    var c=getCoords(mp);
+    svg+='<g data-pid="'+p.id+'" style="cursor:grab">';
+    svg+='<circle cx="'+c.x+'" cy="'+c.y+'" r="20" fill="#1a7dc4" stroke="rgba(255,255,255,.9)" stroke-width="2.5"/>';
+    svg+='<text x="'+c.x+'" y="'+c.y+'" font-family="sans-serif" font-size="13" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="central">'+esc(p.dorsal)+'</text>';
+    svg+='<text x="'+c.x+'" y="'+(c.y+29)+'" font-family="sans-serif" font-size="9.5" font-weight="600" fill="white" text-anchor="middle">'+esc(p.nombre.split(' ')[0])+'</text>';
+    svg+='</g>';
   });
   svg+='</svg>';
-
-  // Suplentes
   var subsHTML='';
   if(subs.length>0){
-    subsHTML='<div style="margin-top:10px"><p style="font-size:10px;color:var(--light);font-weight:700;text-transform:uppercase;letter-spacing:.07em;margin-bottom:7px">Suplentes</p>'
-      +'<div style="display:flex;gap:7px;flex-wrap:wrap">';
+    subsHTML='<div style="margin-top:10px"><p style="font-size:10px;color:var(--light);font-weight:700;text-transform:uppercase;letter-spacing:.07em;margin-bottom:7px">Suplentes</p><div style="display:flex;gap:7px;flex-wrap:wrap">';
     subs.forEach(function(mp){
       var p=getPlayer(mp.jugadorId);if(!p)return;
       subsHTML+='<div style="display:flex;align-items:center;gap:5px;background:#f3f4f6;border-radius:8px;padding:5px 10px">'
-        +posBadge(p.posicion,24)
-        +'<span style="font-size:12px;font-weight:600;color:var(--text)">#'+esc(p.dorsal)+' '+esc(p.nombre.split(' ')[0])+'</span>'
-        +'</div>';
+        +posBadge(p.posicion,24)+'<span style="font-size:12px;font-weight:600;color:var(--text)">#'+esc(p.dorsal)+' '+esc(p.nombre.split(' ')[0])+'</span></div>';
     });
     subsHTML+='</div></div>';
   }
-  var warningHTML=unplaced.length>0
-    ?'<p style="font-size:11px;color:var(--muted);margin-top:8px">⚠ Sin posición: '+unplaced.map(function(u){return u.p?u.p.nombre.split(' ')[0]:'?';}).join(', ')+'</p>'
-    :'';
-  var hintHTML=placed.length===0
-    ?'<p style="font-size:12px;color:var(--muted);text-align:center;padding:8px 0">Asigna la <strong>posición jugada</strong> a cada titular en "Convocatoria y minutos" para ver la alineación.</p>'
-    :'';
-
+  var hint=titulars.length===0
+    ?'<p style="font-size:12px;color:var(--muted);text-align:center;padding:8px 0">Marca jugadores como <strong>Titular</strong> para verlos en el campo.</p>'
+    :'<p style="font-size:11px;color:var(--light);margin-top:8px;text-align:center">Arrastra los jugadores para reposicionarlos en el campo</p>';
   return '<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px">'
-    +'<p class="slbl" style="margin-bottom:10px">Alineación titular · 1·2·3·1</p>'
-    +svg+subsHTML+warningHTML+hintHTML
-    +'</div>';
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+    +'<p class="slbl" style="margin:0">Alineación titular</p>'
+    +'<button onclick="resetLineup(\''+mid+'\')" class="btn btn-gray btn-sm" style="font-size:11px">↺ Restablecer</button>'
+    +'</div>'+svg+subsHTML+hint+'</div>';
+}
+
+function resetLineup(mid){
+  if(S.lineupPos[mid])delete S.lineupPos[mid];
+  var el=document.getElementById('lineup-'+mid);
+  if(el){el.innerHTML=lineupHTML(mid);initLineupDrag(mid);}
+}
+
+function initLineupDrag(mid){
+  var svg=document.getElementById('lineup-svg-'+mid);
+  if(!svg||svg._di)return;
+  svg._di=true;
+  var drag=null;
+  function pt(e){
+    var t=e.touches?e.touches[0]:e;
+    var r=svg.getBoundingClientRect();
+    return {
+      x:Math.max(20,Math.min(260,Math.round((t.clientX-r.left)*280/r.width))),
+      y:Math.max(20,Math.min(385,Math.round((t.clientY-r.top)*400/r.height)))
+    };
+  }
+  function dn(e){var g=e.target.closest('g[data-pid]');if(!g)return;e.preventDefault();drag=g.getAttribute('data-pid');}
+  function mv(e){
+    if(!drag)return;e.preventDefault();
+    var c=pt(e);
+    if(!S.lineupPos[mid])S.lineupPos[mid]={};
+    S.lineupPos[mid][drag]=c;
+    var g=svg.querySelector('g[data-pid="'+drag+'"]');
+    if(g){
+      var ci=g.querySelector('circle');
+      var tx=g.querySelectorAll('text');
+      if(ci){ci.setAttribute('cx',c.x);ci.setAttribute('cy',c.y);}
+      if(tx[0]){tx[0].setAttribute('x',c.x);tx[0].setAttribute('y',c.y);}
+      if(tx[1]){tx[1].setAttribute('x',c.x);tx[1].setAttribute('y',c.y+29);}
+    }
+  }
+  function up(){drag=null;}
+  svg.addEventListener('mousedown',dn);
+  window.addEventListener('mousemove',mv);
+  window.addEventListener('mouseup',up);
+  svg.addEventListener('touchstart',dn,{passive:false});
+  window.addEventListener('touchmove',mv,{passive:false});
+  window.addEventListener('touchend',up);
 }
 
 function openMatchDetail(mid){ S.view='match-detail'; S.viewMatchId=mid; renderContent(); }
@@ -857,7 +895,7 @@ function renderMatchDetail(c){
     +'</div>';
   // Botón alineación
   h+='<button id="lineup-btn-'+mid+'" onclick="toggleLineup(\''+mid+'\')" class="btn btn-full" style="background:#fff;color:var(--blue);font-weight:700;margin-bottom:12px;border:1.5px solid var(--blue)">🏟 Ver alineación ▾</button>';
-  h+='<div id="lineup-'+mid+'" style="display:none">'+lineupHTML(mid)+'</div>';
+  h+='<div id="lineup-'+mid+'" style="display:none"></div>';
   h+='<p class="slbl">Convocatoria y minutos</p>';
   if(sp.length===0){
     h+='<div class="empty"><div class="eico">👥</div><h3>Sin jugadores</h3><p>Añade jugadores en Equipo primero.</p></div>';
@@ -882,7 +920,7 @@ function renderMatchDetail(c){
         +'<div class="fg"><label class="flbl">Posición jugada</label>'
         +'<select class="finput form-select" id="mpposicion-'+p.id+'" onchange="setMPField(\''+mid+'\',\''+p.id+'\',\'posicion\')">'
         +'<option value="">–</option>'
-        +PLAY_POS.map(function(pos){return '<option value="'+pos+'"'+(mp.posicion===pos?' selected':'')+'>'+pos+'</option>';}).join('')
+        +PLAY_POS.map(function(pos){return '<option value="'+pos+'"'+(mp.posicion===pos?' selected':'')+'>'+pos+' – '+(PLAY_POS_LABELS[pos]||pos)+'</option>';}).join('')
         +'</select></div>'
         +'<div class="fg"><label class="flbl">Nota del partido</label>'
         +'<input type="text" class="finput" id="mpnotas-'+p.id+'" value="'+esc(mp.notas||'')+'" placeholder="Observación..." onchange="setMPField(\''+mid+'\',\''+p.id+'\',\'notas\')"></div>'
