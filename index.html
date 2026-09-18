@@ -749,6 +749,95 @@ function deleteMatch(mid){
 }
 
 // ── VIEW: MATCH DETAIL ────────────────────────────────────────────
+function toggleLineup(mid){
+  var el=document.getElementById('lineup-'+mid);
+  var btn=document.getElementById('lineup-btn-'+mid);
+  if(!el)return;
+  var visible=el.style.display==='block';
+  el.style.display=visible?'none':'block';
+  btn.textContent=visible?'🏟 Ver alineación ▾':'🏟 Ocultar alineación ▲';
+}
+
+function lineupHTML(mid){
+  // Coordenadas de cada posición en campo Fútbol 7 (1-2-3-1), ataque hacia arriba
+  var coords={
+    'PO': {x:140,y:345},
+    'DI': {x:62, y:265},
+    'DD': {x:218,y:265},
+    'IL': {x:48, y:175},
+    'MC': {x:140,y:182},
+    'IR': {x:232,y:175},
+    'DE': {x:140,y:72}
+  };
+  var mps=S.matchPlayers.filter(function(mp){return mp.partidoId===mid&&mp.convocado;});
+  var titulars=mps.filter(function(mp){return mp.titular;});
+  var subs=mps.filter(function(mp){return !mp.titular;});
+  var occupied={}, placed=[], unplaced=[];
+  titulars.forEach(function(mp){
+    var p=getPlayer(mp.jugadorId);
+    var pos=mp.posicion||'';
+    if(pos&&coords[pos]&&!occupied[pos]){occupied[pos]=true;placed.push({p:p,mp:mp,pos:pos});}
+    else unplaced.push({p:p,mp:mp});
+  });
+
+  // SVG del campo
+  var svg='<svg viewBox="0 0 280 400" width="100%" style="max-width:300px;display:block;margin:0 auto" xmlns="http://www.w3.org/2000/svg">';
+  // Campo
+  svg+='<rect x="10" y="8" width="260" height="378" rx="4" fill="#2d7a3c"/>';
+  // Líneas
+  svg+='<line x1="10" y1="197" x2="270" y2="197" stroke="rgba(255,255,255,.35)" stroke-width="1"/>';
+  svg+='<circle cx="140" cy="197" r="28" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1"/>';
+  svg+='<circle cx="140" cy="197" r="2" fill="rgba(255,255,255,.45)"/>';
+  // Área propia (abajo)
+  svg+='<rect x="72" y="326" width="136" height="60" rx="2" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="1"/>';
+  svg+='<rect x="106" y="384" width="68" height="10" rx="1" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.5"/>';
+  // Área rival (arriba)
+  svg+='<rect x="72" y="8" width="136" height="55" rx="2" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="1"/>';
+  svg+='<rect x="106" y="0" width="68" height="10" rx="1" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.5"/>';
+  // Puntos de penalti
+  svg+='<circle cx="140" cy="348" r="2" fill="rgba(255,255,255,.35)"/>';
+  svg+='<circle cx="140" cy="46" r="2" fill="rgba(255,255,255,.35)"/>';
+  // Label formación
+  svg+='<text x="140" y="395" font-family="sans-serif" font-size="8" fill="rgba(255,255,255,.4)" text-anchor="middle">1 · 2 · 3 · 1</text>';
+
+  // Jugadores titulares con posición
+  placed.forEach(function(item){
+    var x=coords[item.pos].x, y=coords[item.pos].y;
+    var nombre=item.p?item.p.nombre.split(' ')[0]:'?';
+    var dorsal=item.p?item.p.dorsal:'';
+    svg+='<circle cx="'+x+'" cy="'+y+'" r="19" fill="#1a7dc4" stroke="rgba(255,255,255,.9)" stroke-width="2"/>';
+    svg+='<text x="'+x+'" y="'+y+'" font-family="sans-serif" font-size="12" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="central">'+esc(dorsal)+'</text>';
+    svg+='<text x="'+x+'" y="'+(y+27)+'" font-family="sans-serif" font-size="9.5" font-weight="600" fill="white" text-anchor="middle">'+esc(nombre)+'</text>';
+  });
+  svg+='</svg>';
+
+  // Suplentes
+  var subsHTML='';
+  if(subs.length>0){
+    subsHTML='<div style="margin-top:10px"><p style="font-size:10px;color:var(--light);font-weight:700;text-transform:uppercase;letter-spacing:.07em;margin-bottom:7px">Suplentes</p>'
+      +'<div style="display:flex;gap:7px;flex-wrap:wrap">';
+    subs.forEach(function(mp){
+      var p=getPlayer(mp.jugadorId);if(!p)return;
+      subsHTML+='<div style="display:flex;align-items:center;gap:5px;background:#f3f4f6;border-radius:8px;padding:5px 10px">'
+        +posBadge(p.posicion,24)
+        +'<span style="font-size:12px;font-weight:600;color:var(--text)">#'+esc(p.dorsal)+' '+esc(p.nombre.split(' ')[0])+'</span>'
+        +'</div>';
+    });
+    subsHTML+='</div></div>';
+  }
+  var warningHTML=unplaced.length>0
+    ?'<p style="font-size:11px;color:var(--muted);margin-top:8px">⚠ Sin posición: '+unplaced.map(function(u){return u.p?u.p.nombre.split(' ')[0]:'?';}).join(', ')+'</p>'
+    :'';
+  var hintHTML=placed.length===0
+    ?'<p style="font-size:12px;color:var(--muted);text-align:center;padding:8px 0">Asigna la <strong>posición jugada</strong> a cada titular en "Convocatoria y minutos" para ver la alineación.</p>'
+    :'';
+
+  return '<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px">'
+    +'<p class="slbl" style="margin-bottom:10px">Alineación titular · 1·2·3·1</p>'
+    +svg+subsHTML+warningHTML+hintHTML
+    +'</div>';
+}
+
 function openMatchDetail(mid){ S.view='match-detail'; S.viewMatchId=mid; renderContent(); }
 function renderMatchDetail(c){
   var mid=S.viewMatchId;
@@ -766,6 +855,9 @@ function renderMatchDetail(c){
     +'</div>'
     +'<button class="btn btn-sm" style="margin-top:12px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.7);border:none" onclick="openMatchForm(\''+mid+'\')">✏ Editar info del partido</button>'
     +'</div>';
+  // Botón alineación
+  h+='<button id="lineup-btn-'+mid+'" onclick="toggleLineup(\''+mid+'\')" class="btn btn-full" style="background:#fff;color:var(--blue);font-weight:700;margin-bottom:12px;border:1.5px solid var(--blue)">🏟 Ver alineación ▾</button>';
+  h+='<div id="lineup-'+mid+'" style="display:none">'+lineupHTML(mid)+'</div>';
   h+='<p class="slbl">Convocatoria y minutos</p>';
   if(sp.length===0){
     h+='<div class="empty"><div class="eico">👥</div><h3>Sin jugadores</h3><p>Añade jugadores en Equipo primero.</p></div>';
