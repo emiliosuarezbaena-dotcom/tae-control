@@ -137,6 +137,7 @@ input:checked + .sw-slider::before{transform:translateX(18px)}
 /* Progress bar */
 .prog-bar{height:6px;background:#f3f4f6;border-radius:3px;overflow:hidden;margin-top:6px}
 .prog-fill{height:100%;border-radius:3px;background:var(--blue);transition:width .3s}
+.spinning{animation:spin .7s linear infinite}
 @media print{
   .bnav,.back-btn,.no-print{display:none!important}
   body{background:#fff}
@@ -166,6 +167,7 @@ input:checked + .sw-slider::before{transform:translateX(18px)}
   <header class="hdr">
     <div id="hdr-logo"></div>
     <div class="hdr-txt"><p>TAE C</p><p>5ª Categoría Alevín</p></div>
+  <button id="refresh-btn" onclick="refreshData()" title="Actualizar datos" style="background:rgba(255,255,255,.1);border:none;color:rgba(255,255,255,.7);font-size:20px;width:36px;height:36px;border-radius:8px;cursor:pointer;margin-left:auto;display:flex;align-items:center;justify-content:center;flex-shrink:0">↻</button>
     <div class="hdr-badge"><p class="num" id="pc">0</p><p class="lbl">jugadores</p></div>
   </header>
 
@@ -354,6 +356,29 @@ function updateNav(){
   });
 }
 function updatePC(){ document.getElementById('pc').textContent=S.players.length; }
+
+function refreshData(){
+  var btn=document.getElementById('refresh-btn');
+  if(btn){btn.classList.add('spinning');btn.disabled=true;}
+  var currentTab=S.tab, currentView=S.view, currentDate=S.viewDate, currentMid=S.viewMatchId;
+  api({action:'getData'},function(data){
+    if(data.error){alert('Error al actualizar: '+data.error);return;}
+    S.players=data.players||[];
+    S.trainings=data.trainings||[];
+    S.matches=data.matches||[];
+    S.matchPlayers=data.matchPlayers||[];
+    S.tab=currentTab;
+    S.view=currentView;
+    S.viewDate=currentDate;
+    S.viewMatchId=currentMid;
+    updatePC();
+    renderContent();
+    if(btn){btn.classList.remove('spinning');btn.disabled=false;}
+  },function(e){
+    console.error(e);
+    if(btn){btn.classList.remove('spinning');btn.disabled=false;}
+  });
+}
 
 // ── API helper (GET) ──────────────────────────────────────────────
 var GAS_URL='https://script.google.com/macros/s/AKfycby_942bVBCINIcTdZb0kVJ2tQfpwfDanI2Rr_WV2nyR10n746KczrEsBgPO0IhEUX-0ZQ/exec';
