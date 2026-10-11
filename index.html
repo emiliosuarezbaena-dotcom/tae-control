@@ -299,7 +299,11 @@ function playerStats(pid){
 }
 function playerMinutes(pid){
   return S.matchPlayers
-    .filter(function(mp){return mp.jugadorId===pid&&mp.convocado;})
+    .filter(function(mp){
+      if(!mp.convocado||mp.jugadorId!==pid)return false;
+      var m=getMatch(mp.partidoId);
+      return m&&(m.tipo||'Oficial')==='Oficial';
+    })
     .reduce(function(s,mp){return s+(parseInt(mp.minutos)||0);},0);
 }
 function sessionSummary(date){
@@ -596,36 +600,59 @@ function renderSessNoteCard(date){
 
 // ── TAB: ENTRENOS ─────────────────────────────────────────────────
 function renderEntrenos(c){
+  var amiMap={};
+  S.matches.filter(function(m){return m.tipo==='Amistoso';}).forEach(function(m){amiMap[m.fecha]=m;});
+  var allDates=TDATES.slice();
+  Object.keys(amiMap).forEach(function(d){if(allDates.indexOf(d)<0)allDates.push(d);});
+  allDates.sort();
   var byM={};
-  TDATES.forEach(function(d){var m=fmtM(d);if(!byM[m])byM[m]=[];byM[m].push(d);});
+  allDates.forEach(function(d){var m=fmtM(d);if(!byM[m])byM[m]=[];byM[m].push(d);});
   var h='<div class="tab-pad">';
   Object.keys(byM).forEach(function(m){
     h+='<p class="slbl">'+m+'</p>';
     byM[m].forEach(function(d){
       var isT=d===TODAY,isFut=d>TODAY;
-      var sum=!isFut?sessionSummary(d):null;
-      var pre=sum?(sum.present+sum.late):0;
-      var pct=sum&&S.players.length>0?Math.round((pre/S.players.length)*100):null;
-      h+='<div class="mrow" onclick="openTraining(\''+d+'\')">'
-        +'<div class="mdate" style="background:'+(isT?'var(--blue)':'#f3f4f6')+';border-color:'+(isT?'var(--blue)':'#e5e7eb')+'">'
-        +'<p style="font-size:8px;font-weight:700;text-transform:uppercase;color:'+(isT?'rgba(255,255,255,.7)':'var(--light)')+'">'+dayWd(d)+'</p>'
-        +'<p style="font-size:17px;font-weight:700;color:'+(isT?'#fff':isFut?'var(--light)':'var(--text)')+'">'+dayNum(d)+'</p></div>'
-        +'<div style="flex:1">'
-        +'<p style="font-size:13px;font-weight:600;color:'+(isT?'var(--blue)':isFut?'var(--light)':'var(--text)')+'">'+(isT?'Hoy · ':'')+fmtL(d)+'</p>';
-      if(sum){
-        h+='<div style="display:flex;gap:8px;margin-top:3px">';
-        if(sum.present>0) h+='<span style="font-size:11px;color:#16a34a;font-weight:600">✓'+sum.present+'</span>';
-        if(sum.late>0)    h+='<span style="font-size:11px;color:#d97706;font-weight:600">⏱'+sum.late+'</span>';
-        if(sum.injured>0) h+='<span style="font-size:11px;color:#7c3aed;font-weight:600">🩹'+sum.injured+'</span>';
-        if(sum.absent>0)  h+='<span style="font-size:11px;color:#dc2626;font-weight:600">✗'+sum.absent+'</span>';
-        if(pre===0&&!isFut) h+='<span style="font-size:11px;color:var(--light)">Sin registrar</span>';
-        h+='</div>';
-      } else {
-        h+='<p style="font-size:11px;color:var(--light);margin-top:2px">Programado</p>';
+      var isTdDate=TDATES.indexOf(d)>=0;
+      var ami=amiMap[d];
+      // Amistoso card
+      if(ami){
+        h+='<div class="mrow" onclick="openMatchDetail(\''+ami.id+'\')" style="border-left:3px solid #f59e0b">'
+          +'<div class="mdate" style="background:#fef3c7;border-color:#fcd34d">'
+          +'<p style="font-size:8px;font-weight:700;text-transform:uppercase;color:#92400e">'+dayWd(d)+'</p>'
+          +'<p style="font-size:17px;font-weight:700;color:#92400e">'+dayNum(d)+'</p></div>'
+          +'<div style="flex:1">'
+          +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">'
+          +'<span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px">🤝 Amistoso</span></div>'
+          +'<p style="font-size:13px;font-weight:600;color:var(--text)">vs '+esc(ami.rival)+'</p>'
+          +(ami.resultado?'<p style="font-size:12px;color:var(--blue);font-weight:700">'+esc(ami.resultado)+'</p>':'<p style="font-size:11px;color:var(--light)">Sin resultado</p>')
+          +'</div><span style="color:#d1d5db;font-size:20px">›</span></div>';
       }
-      h+='</div>';
-      if(pct!==null&&pre>0) h+='<div style="text-align:right"><p style="font-size:16px;font-weight:700;color:'+(pct>=75?'#16a34a':pct>=50?'#d97706':'#dc2626')+'">'+pct+'%</p></div>';
-      h+='<span style="color:#d1d5db;font-size:20px">›</span></div>';
+      // Training card (only if it's a real training date)
+      if(isTdDate){
+        var sum=!isFut?sessionSummary(d):null;
+        var pre=sum?(sum.present+sum.late):0;
+        var pct=sum&&S.players.length>0?Math.round((pre/S.players.length)*100):null;
+        h+='<div class="mrow" onclick="openTraining(\''+d+'\')">'
+          +'<div class="mdate" style="background:'+(isT?'var(--blue)':'#f3f4f6')+';border-color:'+(isT?'var(--blue)':'#e5e7eb')+'">'
+          +'<p style="font-size:8px;font-weight:700;text-transform:uppercase;color:'+(isT?'rgba(255,255,255,.7)':'var(--light)')+'">'+dayWd(d)+'</p>'
+          +'<p style="font-size:17px;font-weight:700;color:'+(isT?'#fff':isFut?'var(--light)':'var(--text)')+'">'+dayNum(d)+'</p></div>'
+          +'<div style="flex:1">'
+          +'<p style="font-size:13px;font-weight:600;color:'+(isT?'var(--blue)':isFut?'var(--light)':'var(--text)')+'">'+(isT?'Hoy · ':'')+fmtL(d)+'</p>';
+        if(sum){
+          h+='<div style="display:flex;gap:8px;margin-top:3px">';
+          if(sum.present>0) h+='<span style="font-size:11px;color:#16a34a;font-weight:600">✓'+sum.present+'</span>';
+          if(sum.late>0)    h+='<span style="font-size:11px;color:#d97706;font-weight:600">⏱'+sum.late+'</span>';
+          if(sum.injured>0) h+='<span style="font-size:11px;color:#7c3aed;font-weight:600">🩹'+sum.injured+'</span>';
+          if(sum.absent>0)  h+='<span style="font-size:11px;color:#dc2626;font-weight:600">✗'+sum.absent+'</span>';
+          if(pre===0&&!isFut) h+='<span style="font-size:11px;color:var(--light)">Sin registrar</span>';
+          h+='</div>';
+        } else {
+          h+='<p style="font-size:11px;color:var(--light);margin-top:2px">Programado</p>';
+        }
+        h+='</div>';
+        if(pct!==null&&pre>0) h+='<div style="text-align:right"><p style="font-size:16px;font-weight:700;color:'+(pct>=75?'#16a34a':pct>=50?'#d97706':'#dc2626')+'">'+pct+'%</p></div>';
+        h+='<span style="color:#d1d5db;font-size:20px">›</span></div>';
+      }
     });
     h+='<div style="height:8px"></div>';
   });
@@ -688,7 +715,7 @@ function renderTraining(c){
 
 // ── TAB: PARTIDOS ─────────────────────────────────────────────────
 function renderPartidos(c){
-  var ms=S.matches.slice().sort(function(a,b){return a.fecha<b.fecha?1:-1;});
+  var ms=S.matches.filter(function(m){return (m.tipo||'Oficial')==='Oficial';}).sort(function(a,b){return a.fecha<b.fecha?1:-1;});
   var h='<div class="tab-pad">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'
     +'<div><p style="font-weight:700;font-size:16px;color:var(--text)">'+ms.length+' partidos</p></div>'
@@ -734,6 +761,11 @@ function renderMatchForm(c){
     +'<input type="date" class="finput" id="mf-fecha" value="'+esc(f.fecha)+'"></div>'
     +'<div class="fg"><label class="flbl">Rival</label>'
     +'<input type="text" class="finput" id="mf-rival" placeholder="Nombre del equipo rival" value="'+esc(f.rival)+'"></div>'
+    +'<div class="fg"><label class="flbl">Tipo de partido</label>'
+    +'<select class="finput form-select" id="mf-tipo">'
+    +'<option value="Oficial"'+((!f.tipo||f.tipo==='Oficial')?' selected':'')+'>⚽ Oficial</option>'
+    +'<option value="Amistoso"'+(f.tipo==='Amistoso'?' selected':'')+'>🤝 Amistoso</option>'
+    +'</select></div>'
     +'<div class="frow">'
     +'<div class="fg"><label class="flbl">Sede</label>'
     +'<select class="finput form-select" id="mf-sede">'
@@ -757,6 +789,7 @@ function saveMatchForm(){
   f.sede=document.getElementById('mf-sede').value;
   f.resultado=document.getElementById('mf-resultado').value.trim();
   f.notas=document.getElementById('mf-notas').value.trim();
+  f.tipo=document.getElementById('mf-tipo').value||'Oficial';
   if(!f.rival){alert('Indica el nombre del rival.');return;}
   if(!f.fecha){alert('Indica la fecha del partido.');return;}
   var idx=S.matches.findIndex(function(m){return m.id===f.id;});
