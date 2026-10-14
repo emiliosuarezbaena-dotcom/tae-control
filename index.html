@@ -1043,6 +1043,9 @@ function renderPlayerReport(c){
   var mps=S.matchPlayers.filter(function(mp){return mp.jugadorId===pid&&mp.convocado;});
   var totalMins=mps.reduce(function(s,mp){return s+(parseInt(mp.minutos)||0);},0);
   var starters=mps.filter(function(mp){return mp.titular;}).length;
+  var minsOficial=mps.reduce(function(s,mp){var m=getMatch(mp.partidoId);return s+((m&&(m.tipo||'Oficial')==='Oficial')?(parseInt(mp.minutos)||0):0);},0);
+  var minsAmistoso=mps.reduce(function(s,mp){var m=getMatch(mp.partidoId);return s+((m&&m.tipo==='Amistoso')?(parseInt(mp.minutos)||0):0);},0);
+  var minsSub=(minsOficial>0?minsOficial+"' ofic.":'')+(minsOficial>0&&minsAmistoso>0?' · ':'')+(minsAmistoso>0?minsAmistoso+"' amist.":'') || (mps.length+' conv. · '+starters+' titular');
   var rated=mps.filter(function(mp){return parseInt(mp.valoracion)>0;});
   var avgRating=rated.length>0?(rated.reduce(function(s,mp){return s+(parseInt(mp.valoracion)||0);},0)/rated.length).toFixed(1):0;
   var trainObs=S.trainings.filter(function(r){return r.jugadorId===pid&&r.notaJugador&&r.notaJugador.toString().trim();}).sort(function(a,b){return a.fecha<b.fecha?1:-1;});
@@ -1060,7 +1063,7 @@ function renderPlayerReport(c){
   // Estadísticas resumen
   h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">';
   [{l:'Asistencia',v:st.pct!==null?st.pct+'%':'–',s:(st.pre+st.lat)+'/'+st.tot+' sesiones',c:'var(--blue)'},
-   {l:'Minutos jugados',v:totalMins+"'",s:mps.length+' conv. · '+starters+' titular',c:'#7c3aed'},
+   {l:'Minutos jugados',v:totalMins+"'",s:minsSub,c:'#7c3aed'},
    {l:'Faltas',v:st.abs,s:st.inj+' por lesión · '+st.lat+' tarde',c:'#dc2626'},
    {l:'Valoración media',v:avgRating>0?avgRating+'★':'–',s:rated.length+' partidos valorados',c:'#d97706'}
   ].forEach(function(sc){
