@@ -1089,18 +1089,20 @@ function renderPlayerReport(c){
     h+='<p class="slbl">Partidos</p>'
       +'<div class="card" style="padding:0;overflow:hidden;margin-bottom:14px">'
       +'<table style="width:100%;border-collapse:collapse;font-size:12px">'
-      +'<tr style="background:var(--blue);color:#fff;-webkit-print-color-adjust:exact"><th style="padding:7px 10px;text-align:left">Fecha</th><th style="padding:7px 10px;text-align:left">Rival</th><th style="padding:7px 10px;text-align:center">Rol</th><th style="padding:7px 10px;text-align:center">Min</th><th style="padding:7px 10px;text-align:center">Val</th></tr>';
+      +'<tr style="background:var(--blue);color:#fff;-webkit-print-color-adjust:exact"><th style="padding:7px 10px;text-align:left">Fecha</th><th style="padding:7px 10px;text-align:left">Rival</th><th style="padding:7px 10px;text-align:center">Tipo</th><th style="padding:7px 10px;text-align:center">Rol</th><th style="padding:7px 10px;text-align:center">Min</th><th style="padding:7px 10px;text-align:center">Val</th></tr>';
     matchHist.forEach(function(d,i){
       var bg=i%2===0?'#fff':'#f9fafb';
-      var stars=''; for(var s=1;s<=5;s++) stars+='<span style="color:'+(s<=(parseInt(d.mp.valoracion)||0)?'#f5c518':'#e5e7eb')+'">★</span>';
+        var esAmi=(d.m.tipo||'Oficial')==='Amistoso';
+  var stars=''; for(var s=1;s<=5;s++) stars+='<span style="color:'+(s<=(parseInt(d.mp.valoracion)||0)?'#f5c518':'#e5e7eb')+'">★</span>';
       h+='<tr style="background:'+bg+'">'
         +'<td style="padding:5px 10px;color:var(--muted)">'+fmtS(d.m.fecha)+'</td>'
         +'<td style="padding:5px 10px;font-weight:600">'+esc(d.m.rival)+(d.m.resultado?' <span style="color:var(--blue)">'+esc(d.m.resultado)+'</span>':'')+'</td>'
-        +'<td style="padding:5px 10px;text-align:center;color:'+(d.mp.titular?'#16a34a':'#d97706')+';font-weight:600">'+(d.mp.titular?'Titular':'Suplente')+'</td>'
+        +'<td style="padding:5px 10px;text-align:center"><span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;'+(esAmi?'background:#fef3c7;color:#92400e':'background:#dbeafe;color:#1d4ed8')+'">'+(esAmi?'🤝 Ami':'⚽ Ofic')+'</span></td>'
+     +'<td style="padding:5px 10px;text-align:center;color:'+(d.mp.titular?'#16a34a':'#d97706')+';font-weight:600">'+(d.mp.titular?'Titular':'Suplente')+'</td>'
         +'<td style="padding:5px 10px;text-align:center;font-weight:600">'+(d.mp.minutos||'–')+"'</td>"
         +'<td style="padding:5px 10px;text-align:center">'+stars+'</td></tr>';
       if(d.mp.notas&&d.mp.notas.toString().trim())
-        h+='<tr style="background:'+bg+'"><td colspan="5" style="padding:2px 10px 7px;color:var(--muted);font-style:italic">'+esc(d.mp.notas)+'</td></tr>';
+        h+='<tr style="background:'+bg+'"><td colspan="6" style="padding:2px 10px 7px;color:var(--muted);font-style:italic">'+esc(d.mp.notas)+'</td></tr>';
     });
     h+='</table></div>';
   }
@@ -1175,7 +1177,9 @@ function renderStats(c){
     var st=playerStats(p.id);
     var mins=playerMinutes(p.id);
     var mps=S.matchPlayers.filter(function(mp){if(mp.jugadorId!==p.id||!mp.convocado)return false;var m=getMatch(mp.partidoId);return m&&(m.tipo||'Oficial')==='Oficial';});
-    return Object.assign({},p,st,{mins:mins,partidos:mps.length});
+        var rated=mps.filter(function(mp){return parseInt(mp.valoracion)>0;});
+    var avgRating=rated.length>0?Math.round((rated.reduce(function(s,mp){return s+(parseInt(mp.valoracion)||0);},0)/rated.length)*10)/10:0;
+    return Object.assign({},p,st,{mins:mins,partidos:mps.length,avgRating:avgRating,ratedCount:rated.length});
   });
   var totPre=statsArr.reduce(function(s,p){return s+p.pre+p.lat;},0);
   var totPoss=S.players.length*totalS;
@@ -1242,7 +1246,26 @@ function renderStats(c){
       h+='</div>';
     });
   }
-  h+='</div>';
+    // Valoracion media ranking
+  var byRating=statsArr.filter(function(p){return p.ratedCount>0;}).sort(function(a,b){return b.avgRating-a.avgRating;});
+  if(byRating.length>0){
+    h+='<p class="slbl" style="margin-top:8px">Valoración media (partidos oficiales)</p>';
+    byRating.forEach(function(p,i){
+      var starsH='';for(var s=1;s<=5;s++) starsH+='<span style="font-size:16px;color:'+(s<=Math.round(p.avgRating)?'#f5c518':'#e5e7eb')+'">★</span>';
+      h+='<div class="scard" style="margin-bottom:7px">'
+        +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">'
+        +'<span style="font-size:12px;font-weight:700;color:var(--light);width:16px;text-align:center">'+(i+1)+'</span>'
+        +posBadge(p.posicion,30)
+        +'<p style="flex:1;font-weight:600;font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(p.nombre)+'</p>'
+        +'<p style="font-size:15px;font-weight:700;color:#d97706">'+p.avgRating+'★</p>'
+        +'</div>'
+        +'<div style="padding-left:54px">'
+        +'<div style="display:flex;gap:2px">'+starsH+'</div>'
+        +'<p style="font-size:11px;color:var(--light);margin-top:2px">'+p.ratedCount+' partido'+(p.ratedCount===1?'':'s')+' valorado'+(p.ratedCount===1?'':'s')+'</p>'
+        +'</div></div>';
+    });
+  }
+h+='</div>';
   c.innerHTML=h;
 }
 
