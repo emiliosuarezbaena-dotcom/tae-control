@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content=width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>TAE B · Control</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -1174,7 +1174,7 @@ function renderStats(c){
   var statsArr=sortedPlayers().map(function(p){
     var st=playerStats(p.id);
     var mins=playerMinutes(p.id);
-    var mps=S.matchPlayers.filter(function(mp){return mp.jugadorId===p.id&&mp.convocado;});
+    var mps=S.matchPlayers.filter(function(mp){if(mp.jugadorId!==p.id||!mp.convocado)return false;var m=getMatch(mp.partidoId);return m&&(m.tipo||'Oficial')==='Oficial';});
     return Object.assign({},p,st,{mins:mins,partidos:mps.length});
   });
   var totPre=statsArr.reduce(function(s,p){return s+p.pre+p.lat;},0);
