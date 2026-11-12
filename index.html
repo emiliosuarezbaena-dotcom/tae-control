@@ -772,7 +772,7 @@ function renderMatchForm(c){
     +['Local','Visitante','Neutro'].map(function(v){return '<option value="'+v+'"'+(f.sede===v?' selected':'')+'>'+v+'</option>';}).join('')
     +'</select></div>'
     +'<div class="fg"><label class="flbl">Resultado</label>'
-    +'<input type="text" class="finput" id="mf-resultado" placeholder="2-1" value="'+esc(f.resultado)+'"></div></div>'
+    +'<input type="text" class="finput" id="mf-resultado" placeholder="2 - 1" value="'+esc(f.resultado)+'"></div></div>'
     +'<div class="fg"><label class="flbl">Notas del partido</label>'
     +'<textarea class="finput" id="mf-notas" style="resize:none;height:64px" placeholder="Observaciones generales...">'+esc(f.notas)+'</textarea></div>'
     +'<div style="display:flex;gap:8px;margin-top:4px">'
@@ -787,7 +787,7 @@ function saveMatchForm(){
   f.fecha=document.getElementById('mf-fecha').value;
   f.rival=document.getElementById('mf-rival').value.trim();
   f.sede=document.getElementById('mf-sede').value;
-  f.resultado=document.getElementById('mf-resultado').value.trim();
+  f.resultado=normResult(document.getElementById('mf-resultado').value);
   f.notas=document.getElementById('mf-notas').value.trim();
   f.tipo=document.getElementById('mf-tipo').value||'Oficial';
   if(!f.rival){alert('Indica el nombre del rival.');return;}
@@ -934,11 +934,15 @@ function initLineupDrag(mid){
   window.addEventListener('touchend',up);
 }
 
+function normResult(r){
+  r=(r||'').trim();
+  return r.replace(/^(\d+)\s*[-\u2013]\s*(\d+)$/,'$1 - $2')||r;
+}
 function editResult(mid){
   var m=getMatch(mid); if(!m)return;
-  var r=prompt('Resultado del partido (ej: 3-2):',m.resultado||'');
+  var r=prompt('Resultado del partido (ej: 3 - 2):',m.resultado||'');
   if(r===null)return;
-  m.resultado=r.trim();
+  m.resultado=normResult(r);
   saveMatchesNow(mid);
   renderContent();
 }
